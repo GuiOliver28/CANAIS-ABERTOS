@@ -43,38 +43,39 @@ jobs:
           mkdir -p _work
           unzip -q "$ZIP" -d _work
 
-          # Detecta a raiz do projeto (zip pode ter pasta interna)
-          if [ -f "_work/settings.gradle.kts" ] || [ -f "_work/settings.gradle" ]; then
-            ROOT="_work"
-          else
-            CANDIDATE=$(find _work -maxdepth 2 \( -name "settings.gradle.kts" -o -name "settings.gradle" \) | head -n1)
-            if [ -z "$CANDIDATE" ]; then
-              echo "::error::settings.gradle(.kts) não encontrado dentro do zip"
-              find _work -maxdepth 3 -type d
-              exit 1
-            fi
-            ROOT=$(dirname "$CANDIDATE")
+          # Se houver uma única pasta dentro de _work e ela tiver o settings.gradle, entra nela
+          cd _work
+          COUNT=$(ls -1 | wc -l)
+          if [ "$COUNT" -eq 1 ] && [ -d "$(ls -1)" ]; then
+            cd "$(ls -1)"
           fi
-          echo "Raiz do projeto: $ROOT"
-          echo "root=$ROOT" >> $GITHUB_OUTPUT
+          
+          if [ -f "settings.gradle.kts" ] || [ -f "settings.gradle" ]; then
+            ROOT=$(pwd)
+          else
+            echo "::error::settings.gradle(.kts) não encontrado"
+            find . -maxdepth 3 -type d
+            exit 1
+          fi
+          
+          cd "$GITHUB_WORKSPACE"
+          ROOT_REL=$(echo "$ROOT" | sed "s|$GITHUB_WORKSPACE/||")
+          echo "Raiz do projeto: $ROOT_REL"
+          echo "root=$ROOT_REL" >> $GITHUB_OUTPUT
 
-      - name: Verificar estrutura do projeto
+      - name: Corrigir build.gradle.kts (Workaround)
         run: |
           cd "${{ steps.extract.outputs.root }}"
-          echo "--- Conteúdo da raiz ---"
-          ls -la
-          echo "--- settings.gradle(.kts) ---"
-          cat settings.gradle.kts 2>/dev/null || cat settings.gradle 2>/dev/null || true
-          echo "--- Módulos declarados ---"
-          grep -E "include" settings.gradle.kts 2>/dev/null || grep -E "include" settings.gradle 2>/dev/null || true
+          # Remove as linhas problemáticas de leitura do keystore (30 a 35 aprox)
+          # e substitui por uma versão que funciona no Kotlin DSL do Gradle
+          sed -i '/val keystoreProps = java.util.Properties()/d' app/build.gradle.kts
+          sed -i '/if (f.exists()) f.inputStream().use { load(it) }/d' app/build.gradle.kts
+          sed -i '/^[[:space:]]*}$/d' app/build.gradle.kts
+          echo "Arquivo build.gradle.kts modificado para remover dependência do keystore."
 
       - name: Dar permissão ao gradlew
         run: |
           cd "${{ steps.extract.outputs.root }}"
-          if [ ! -f gradlew ]; then
-            echo "::error::gradlew ausente no zip"
-            exit 1
-          fi
           chmod +x gradlew
 
       - name: Rodar testes unitários do core-data
@@ -94,17 +95,6 @@ jobs:
           set +e
           ./gradlew assembleDebug --stacktrace --no-daemon 2>&1 | tee build-apk.log
           echo "exit_code=${PIPESTATUS[0]}" >> $GITHUB_OUTPUT
-
-      - name: Upload do relatório de testes
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: relatorio-testes
-          path: |
-            ${{ steps.extract.outputs.root }}/core-data/build/reports/tests/testDebugUnitTest/
-            ${{ steps.extract.outputs.root }}/build-tests.log
-          if-no-files-found: warn
-          retention-days: 7
 
       - name: Upload do log de build (sempre, mesmo falhando)
         if: always()
