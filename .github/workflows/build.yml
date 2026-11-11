@@ -122,7 +122,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: canais-abertos-debug
-          path: ${{ steps.extract.outputs.root }}/app/build/outputs/apk/debug/*.apk
+          path: ${{ steps.extract.outputs.root }}/**/build/outputs/apk/debug/*.apk
           if-no-files-found: error
           retention-days: 14
 
