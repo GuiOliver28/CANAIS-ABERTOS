@@ -3,8 +3,6 @@ name: Android Build - Canais Abertos
 on:
   push:
     branches: [ main, master ]
-  pull_request:
-    branches: [ main, master ]
   workflow_dispatch:
 
 jobs:
@@ -62,6 +60,15 @@ jobs:
           echo "Raiz do projeto: $ROOT_REL"
           echo "root=$ROOT_REL" >> $GITHUB_OUTPUT
 
+      - name: VERIFICAR ARQUIVOS DE BUILD (DEBUG)
+        run: |
+          cd "${{ steps.extract.outputs.root }}"
+          echo "=== CONTEÚDO DO settings.gradle.kts ==="
+          cat settings.gradle.kts || echo "NÃO ENCONTRADO"
+          echo ""
+          echo "=== CONTEÚDO DO app/build.gradle.kts ==="
+          cat app/build.gradle.kts || echo "NÃO ENCONTRADO"
+
       - name: Dar permissão ao gradlew
         run: |
           cd "${{ steps.extract.outputs.root }}"
@@ -96,20 +103,12 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
-      - name: Localizar e enviar APK de debug
-        if: steps.build.outcome == 'success'
-        run: |
-          cd "${{ steps.extract.outputs.root }}"
-          echo "Procurando arquivos .apk no projeto..."
-          find . -name "*.apk" -type f
-          find . -name "*.apk" -type f -exec cp {} /tmp/ \;
-
       - name: Upload do APK de debug
         if: steps.build.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: canais-abertos-debug
-          path: /tmp/*.apk
+          path: ${{ steps.extract.outputs.root }}/**/build/outputs/apk/debug/*.apk
           if-no-files-found: error
           retention-days: 14
 
