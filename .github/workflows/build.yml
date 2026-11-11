@@ -43,7 +43,6 @@ jobs:
           mkdir -p _work
           unzip -q "$ZIP" -d _work
 
-          # Se houver uma única pasta dentro de _work e ela tiver o settings.gradle, entra nela
           cd _work
           COUNT=$(ls -1 | wc -l)
           if [ "$COUNT" -eq 1 ] && [ -d "$(ls -1)" ]; then
@@ -62,16 +61,6 @@ jobs:
           ROOT_REL=$(echo "$ROOT" | sed "s|$GITHUB_WORKSPACE/||")
           echo "Raiz do projeto: $ROOT_REL"
           echo "root=$ROOT_REL" >> $GITHUB_OUTPUT
-
-      - name: Corrigir build.gradle.kts (Workaround)
-        run: |
-          cd "${{ steps.extract.outputs.root }}"
-          # Remove as linhas problemáticas de leitura do keystore (30 a 35 aprox)
-          # e substitui por uma versão que funciona no Kotlin DSL do Gradle
-          sed -i '/val keystoreProps = java.util.Properties()/d' app/build.gradle.kts
-          sed -i '/if (f.exists()) f.inputStream().use { load(it) }/d' app/build.gradle.kts
-          sed -i '/^[[:space:]]*}$/d' app/build.gradle.kts
-          echo "Arquivo build.gradle.kts modificado para remover dependência do keystore."
 
       - name: Dar permissão ao gradlew
         run: |
@@ -107,12 +96,20 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
+      - name: Localizar e enviar APK de debug
+        if: steps.build.outcome == 'success'
+        run: |
+          cd "${{ steps.extract.outputs.root }}"
+          echo "Procurando arquivos .apk no projeto..."
+          find . -name "*.apk" -type f
+          find . -name "*.apk" -type f -exec cp {} /tmp/ \;
+
       - name: Upload do APK de debug
         if: steps.build.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: canais-abertos-debug
-          path: ${{ steps.extract.outputs.root }}/**/build/outputs/apk/debug/*.apk
+          path: /tmp/*.apk
           if-no-files-found: error
           retention-days: 14
 
